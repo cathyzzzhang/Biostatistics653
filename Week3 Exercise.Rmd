@@ -1,0 +1,362 @@
+---
+title: "140.653 Lab 03: Adjusted Variable Plots"
+subtitle: | 
+  | Methods in Biostatistics 3 (140.653) 
+  | Jason Haw, Elizabeth Colantuoni and Shuai Li
+author: "Jason Haw, Elizabeth Colantuoni and Shuai Li"
+output: 
+  rmdformats::robobook:
+      number_sections: yes
+      highlight: haddock
+header-includes:
+- \usepackage[T1]{fontenc}
+- \usepackage{fancyhdr}
+- \usepackage{amsmath}
+- \usepackage{float}
+- \floatplacement{figure}{H}
+mainfont: Arial
+---
+
+<style>
+
+body {
+    font-family: Arial, sans-serif;
+}
+
+.book .book-body .page-inner section.normal h1 {
+  font-size: 24px;
+  font-family: Arial, sans-serif;
+}
+
+.book .book-body .page-inner section.normal h1.title {
+  font-size: 2em;
+  margin-top: 0;
+  color: #024873;
+}
+
+.book .book-body .page-inner section.normal h1.subtitle {
+    font-size: 1em;
+    font-weight: 400;
+    margin-top: -15px;
+    color: #024873;  
+}
+
+
+.book .book-body .page-inner section.normal h2, 
+.book .book-body .page-inner section.normal h3, 
+.book .book-body .page-inner section.normal h4 {
+  font-size: 20px;
+  font-family: Arial, sans-serif;  
+}
+
+</style>
+
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(scipen=5)       # To override default scientific notation for large numbers
+options(digits=3)
+```
+
+At the end of this lab, you should be able to:
+
+1. Describe how an adjusted variable regression is similar to multiple linear regression
+2. Create an adjusted variable plot from a multiple linear regression
+
+<br>
+
+We will use the Nepali anthropometry data set provided in this course. We will use the following variables:
+
+* `arm`: arm circumference in cm
+* `age`: age in months
+* `ht`: height in cm
+* `wt`: weight in kg
+* `sex`: sex at birth (male = 1, female = 2)
+
+**In this lab, our goal is to visualize the relationship between arm circumference ($Y_i$) and age ($X_i$) after adjusting for height, weight, and sex ($\mathbf{Z}_i$).**
+
+# Adjusted Variable Plots, Explained
+
+An adjusted variable plot is a graphical tool that allows us to visualize a specific coefficient for a variable of interest in a multiple linear regression model. We "adjust" the outcome variable $Y_i$ and variable of interest $X_i$ for the other variables ($\mathbf{Z}_i$) and visualize that adjustment as a scatterplot.
+
+The adjustment is done in such a way that we remove the information from the other variables (e.g. $\mathbf{Z}_i$) from both $Y_i$ and $X_i$ and examine what remains. This is done by regressing the residuals of a linear model of $Y_i$ regressed on $\mathbf{Z}_i$ on the residuals of a linear model of $X_i$ regressed on $\mathbf{Z}_i$.
+
+This implies that if a simple linear regression was run on the scatterplot of these residuals (residuals for $Y_i$ verses residuals for $X_i$), the linear slope in that plot corresponds to the coefficient of $X_i$ in the multiple linear regression model.
+
+To understand how this works mathematically, consider a multiple linear regression model with a single covariate defining $Z_i$:
+
+$$Y_i = \beta_0 + \beta_1 X_i + \beta_2 Z_i + e_i$$
+
+A sketch of the proof follows:
+
+We can express the relationship of $Y_i$ and $X_i$ only in terms of $Z_i$ and derive their corresponding residuals:
+
+$$Y_i = \alpha_0 + \alpha_1 Z_i + e_{iZY} \implies e_{iZY} = Y_i - (\alpha_0 + \alpha_1 Z_i)$$
+
+$$X_i = \gamma_0 + \gamma_1 Z_i + e_{iZX} \implies e_{iZX} = X_i - (\gamma_0 + \gamma_1 Z_i)$$
+The "adjustment" we make on $Y_i$ and $X_i$ is taking their corresponding residuals $e_{iZY}$ and $e_{iZX}$, i.e. the residuals represent the information about $Y_i$ and $X_i$ that is not explained by $Z_i$. We can then regress the residuals as a simple linear regression:
+
+$$e_{iZY} = \beta_1 e_{iZX} + e_i$$
+$$Y_i - (\alpha_0 + \alpha_1 Z_i) = \beta_1 [X_i - (\gamma_0 + \gamma_1 Z_i)] + e_i $$
+Rearranging the terms:
+
+$$Y_i = \alpha_0 + \beta_1 \gamma_0 + \beta_1 X_i + (\alpha_1 + \beta_1 \gamma_1) Z_i + e_i $$
+We see that:
+
+* $\beta_0 = \alpha_0 + \beta_1 \gamma_0$
+* $\beta_1 = \beta_1$
+* $\beta_2 = \alpha_1 + \beta_1 \gamma_1$
+
+The adjusted variable regression and multiple linear regression give the same coefficient $\beta_1$ for $X_i$.
+
+
+# Creating an Adjusted Variable Plot
+
+## One Additional Covariate
+
+Our goal in this section is to visualize the relationship between arm circumference ($Y$) and age ($X$) after adjusting for height ($Z$)
+
+We first prepare our data for analysis
+
+```{r dataprep, warning = FALSE, message = FALSE}
+library(tidyverse)
+
+# A note about loading data in R
+# When loading data in either .rds or .rdata format, first locate the
+# file on your system and copy the complete file path.
+# Here, we loaded the data set on the same directory where the R project
+# was created, so we only need the file name itself
+# Since you are downloading this Rmd file without the R project where this was
+# originally housed, you need to change the load() function below
+# to the FULL path of the file on your system
+# Note that for Windows, you need to use backslashes \ to identify subfolders
+# as the default frontslash / does not work in R
+
+load("nepal.anthro.rdata")
+
+data1 <- nepal.anthro |> 
+  select(c(1:16)) |> 
+  filter(num == 1) |> 
+  filter(!is.na(age) & !is.na(arm)) |>
+  arrange(age)
+```
+
+The steps for the regression are as follows:
+
+1. Obtain residuals $R(Y|Z)$ from the regression model of arm circumference ($Y$) on height ($Z$).
+2. Obtain residuals $R(X|Z)$ from the regression model of age ($X$) and height ($Z$).
+3. Plot $R(Y|Z)$ and $R(X|Z)$. The slope coefficient is equivalent to the coefficient of $X$ in a multiple regression model of $Y$ on $X$ and $Z$.
+
+
+```{r onecov, warning = FALSE, message = FALSE}
+# Obtain residuals R(Y|Z) and R(X|Z)
+data1 <- data1 |>
+  mutate(resid.arm1 = lm(arm ~ ht, data = data1)$residuals,
+         resid.age1 = lm(age ~ ht, data = data1)$residuals)
+
+# Run the model of R(Y|Z) on R(X|Z)
+resid.model1 <- lm(resid.arm1 ~ resid.age1, data = data1)
+summary(resid.model1)
+
+# We see that the slope in resid.model1 is the same 
+# as the beta of age in the multiple regression model
+mr1 <- lm(arm ~ age + ht, data = data1)
+summary(mr1)
+
+# Create custom theme
+custom_theme <- theme(
+  panel.background = element_blank(),
+  axis.ticks = element_blank(),
+  axis.text = element_text(size = 12),
+  axis.title = element_text(size = 12, face = "bold"),
+  axis.line = element_line(size = 0.5),
+  plot.title = element_text(size = 14, face = "bold", hjust = 0.5)
+)
+
+# Plot the estimates and we add a fitted line
+avplot1 <- ggplot(data = data1,
+                  aes(x = resid.age1, y = resid.arm1)) +
+  geom_jitter(alpha = 0.5) +
+  geom_smooth(aes(y = predict(resid.model1)), method = "lm", formula = y ~ x,
+              linewidth = 1, color = "#024873", se = FALSE) +
+  labs(x = "Residuals of age on height",
+       y = "Residuals of arm circumference on height",
+       title = "Adjusted variable plot for arm circumference on age adjusting for height") +
+  custom_theme
+avplot1
+```
+
+## Two Covariates (or More)
+
+We implement a similar procedure for more than one covariate. Here, we visualize the relationship of arm circumference ($Y$) and age ($X$), adjusting for height, weight, and sex ($\mathbf{Z}$).
+
+```{r twocov, warning = FALSE, message = FALSE}
+# Obtain residuals R(Y|Z) and R(X|Z)
+data1 <- data1 |>
+  mutate(resid.arm2 = lm(arm ~ ht + wt + sex, data = data1)$residuals,
+         resid.age2 = lm(age ~ ht + wt + sex, data = data1)$residuals)
+
+# Run the model of R(Y|Z) on R(X|Z)
+resid.model2 <- lm(resid.arm2 ~ resid.age2, data = data1)
+summary(resid.model2)
+
+# We see that the slope in resid.model1 is the same 
+# as the beta of age in the multiple regression model
+mr2 <- lm(arm ~ age + ht + wt + sex, data = data1)
+summary(mr2)
+
+# Plot the estimates and we add a fitted line
+avplot2 <- ggplot(data = data1,
+                  aes(x = resid.age2, y = resid.arm2)) +
+  geom_jitter(alpha = 0.5) +
+  geom_smooth(aes(y = predict(resid.model2)), method = "lm", formula = y ~ x,
+              linewidth = 1, color = "#024873", se = FALSE) +
+  labs(x = "Residuals of age on height, weight, age",
+       y = "Residuals of arm circumference on height, weight, age",
+       title = "Adjusted variable plot for arm circumference on age \n adjusting for height, weight, age") +
+  custom_theme
+avplot2
+```
+
+
+# In-Class Exercise
+
+With the same data above, using the observed age ($X$), sex ($Z_1$) height($Z_2$), simulate the arm circumference value ($Y$) from the following regression models:
+
+a. $Y_i = 7.8 + 0 \cdot X_i + 0.03Z_{1i} + 0.07Z_{2i} + \epsilon_i, \epsilon \sim N(0, 0.93)$
+b. $Y_i = 7.8 + 0.035 \cdot X_i + 0.03Z_{1i} + 0.07Z_{2i} + \epsilon_i, \epsilon \sim N(0, 0.93)$
+c. $Y_i = 7.8 + 0.05 \cdot X_i - 0.025(X_i - 6)I(X_i > 6) + 0.03Z_{1i} + 0.07Z_{2i} + \epsilon_i, \epsilon \sim N(0, 0.93)$ (Note that $I(\cdot)$ is an indicator function).
+
+For each of these simulated data sets, create an adjusted variable plot of arm circumference on age, adjusting for height and sex.
+
+Comment on the patterns you observe in the adjusted variable plot for each scenario.
+
+Use the hints below to run the simulation procedure:
+
+```{r sims, warning = FALSE, message = FALSE}
+# Set seed for reproducibility
+set.seed(653)
+library(ggplot2)
+library(dplyr)
+
+data1 <- nepal.anthro |> 
+  select(c(1:16)) |> 
+  filter(num == 1) |> 
+  filter(!is.na(age) & !is.na(arm)) |>
+  arrange(age)
+
+# Simulate the scenarios (arm.A, arm.B, arm.C)
+data1 <- data1 |>
+  mutate(arm.A = 7.8 + 0.03*sex + 0.07*ht + rnorm(nrow(data1), 0, 0.93),
+         arm.B = 7.8 + 0.035*age + 0.03*sex + 0.07*ht + rnorm(nrow(data1), 0, 0.93),
+         arm.C = 7.8 + 0.05*age - 0.025*(age-6)*(age > 6) + 0.03*sex + 0.07*ht + 
+           rnorm(nrow(data1), 0, 0.93))
+
+```
+
+
+```{r}
+#For A
+# Obtain residuals R(Y|Z) and R(X|Z)
+data1 <- data1 |>
+  mutate(resid.armA = lm(arm.C ~ ht + sex, data = data1)$residuals,
+         resid.ageA = lm(age ~ ht + sex, data = data1)$residuals)
+
+# Run the model of R(Y|Z) on R(X|Z)
+resid.modelA <- lm(resid.armA ~ resid.ageA, data = data1)
+summary(resid.modelA)
+
+mrA <- lm(arm ~ age + ht + sex, data = data1)
+summary(mrA)
+
+avplotA <- ggplot(data = data1,
+                  aes(x = resid.ageA, y = resid.armA)) +
+  geom_jitter(alpha = 0.5) +
+  geom_smooth(aes(y = predict(resid.modelA)), method = "lm", formula = y ~ x,
+              linewidth = 1, color = "#024873", se = FALSE) +
+  labs(x = "Residuals of age on height, weight, age",
+       y = "Residuals of arm circumference on height, age",
+       title = "Adjusted variable plot for arm circumference on age \n adjusting for height, age") +
+  custom_theme
+avplotA
+```
+
+```{r}
+#for B
+# Obtain residuals R(Y|Z) and R(X|Z)
+data1 <- data1 |>
+  mutate(resid.armB = lm(arm.B ~ ht + sex, data = data1)$residuals,
+         resid.ageB = lm(age ~ ht + sex, data = data1)$residuals)
+
+# Run the model of R(Y|Z) on R(X|Z)
+resid.modelB <- lm(resid.armB ~ resid.ageB, data = data1)
+summary(resid.modelB)
+
+mrB <- lm(arm ~ age + ht + sex, data = data1)
+summary(mrB)
+
+avplotB <- ggplot(data = data1,
+                  aes(x = resid.ageB, y = resid.armB)) +
+  geom_jitter(alpha = 0.5) +
+  geom_smooth(aes(y = predict(resid.modelB)), method = "lm", formula = y ~ x,
+              linewidth = 1, color = "#024873", se = FALSE) +
+  labs(x = "Residuals of age on height, weight, age",
+       y = "Residuals of arm circumference on height, age",
+       title = "Adjusted variable plot for arm circumference on age \n adjusting for height, age") +
+  custom_theme
+avplotB
+```
+
+
+```{r sims, warning = FALSE, message = FALSE}
+# Set seed for reproducibility
+set.seed(653)
+library(ggplot2)
+library(dplyr)
+
+data1 <- nepal.anthro |> 
+  select(c(1:16)) |> 
+  filter(num == 1) |> 
+  filter(!is.na(age) & !is.na(arm)) |>
+  arrange(age)
+
+# Simulate the scenarios (arm.A, arm.B, arm.C)
+data1 <- data1 |>
+  mutate(arm.A = 7.8 + 0.03*sex + 0.07*ht + rnorm(nrow(data1), 0, 0.93),
+         arm.B = 7.8 + 0.035*age + 0.03*sex + 0.07*ht + rnorm(nrow(data1), 0, 0.93),
+         arm.C = 7.8 + 0.05*age - 0.025*(age-6)*(age > 6) + 0.03*sex + 0.07*ht + 
+           rnorm(nrow(data1), 0, 0.93))
+
+```
+
+With the same data above, using the observed age (𝑋), sex (𝑍1) height(𝑍2), simulate the arm circumference value (𝑌)
+
+```{r}
+#For C
+#arm.C = 7.8 + 0.05*age - 0.025*(age-6)*(age > 6) + 0.03*sex + 0.07*ht + 
+           #rnorm(nrow(data1), 0, 0.93))
+
+# Obtain residuals R(Y|Z) and R(X|Z)
+data1 <- data1 |>
+  mutate(resid.armC = lm(arm.C ~ ht + sex, data = data1)$residuals,
+         resid.ageC = lm(age ~ ht + sex, data = data1)$residuals)
+
+# Run the model of R(Y|Z) on R(X|Z)
+resid.modelC <- lm(resid.armC ~ resid.ageC, data = data1)
+summary(resid.modelC)
+
+mrC <- lm(arm ~ age + ht + sex, data = data1)
+summary(mrC)
+
+avplotC <- ggplot(data = data1,
+                  aes(x = resid.ageC, y = resid.armC)) +
+  geom_jitter(alpha = 0.8) +
+  geom_smooth(aes(y = predict(resid.modelC)), method = "lm", formula = y ~ x,
+              linewidth = 1, color = "#024873", se = FALSE) +
+  labs(x = "Residuals of age on height, age",
+       y = "Residuals of arm circumference on height, sex",
+       title = "Adjusted variable plot for arm circumference on age \n adjusting for height, sex") +
+  custom_theme
+avplotC
+```
+

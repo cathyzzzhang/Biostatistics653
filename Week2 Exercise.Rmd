@@ -1,0 +1,137 @@
+---
+title: "Week2 Exercise"
+output: html_document
+date: "2024-01-30"
+---
+
+```{r}
+load("Lab2_exercise.rds") #type data to get data
+
+data |>
+  select(age, arm)
+ggplot(data, aes(x = age, y = arm)) +
+geom_jitter(alpha = 0.5) +
+theme_bw() +
+scale_y_continuous(breaks=seq(8,18,2),limits=c(8,18)) +
+scale_x_continuous(breaks=seq(0,60,6),limits=c(0,60)) +
+labs(y = "Arm cirumference (in cm)", x = "Age (in months)") +
+theme(panel.border = element_blank(),
+panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(),
+axis.line = element_line(colour = "black"))
+
+library(splines)
+model1_ns <- lm(age ~ ns(arm, 1), data = data)
+model2_ns <- lm(age ~ ns(arm, 2), data = data)
+model3_ns <- lm(age ~ ns(arm, 3), data = data)
+
+```
+
+```{r}
+plot1 <- ggplot(data = data, aes(x = age, y = arm)) +
+  geom_jitter(size = 1.5, alpha = 0.5) +
+  labs(x = 'age at baseline (in months)',
+       y = 'arm circumference (in cm)')+
+  scale_x_continuous(breaks = seq(0,60,10)) +
+  scale_y_continuous(breaks = seq(0,20,5))
+
+plot1
+
+## Adding a smoothed curve
+#1. Natural Spline with three degrees of freedom
+
+library(splines)
+plot1ns <- plot1+
+  geom_smooth(method = 'glm', formula = y~ns(x,df=1), se = FALSE,
+              size = 1.5, color = '#024873')+
+  geom_smooth(method = 'glm', formula = y~ns(x,df=2), se = FALSE,
+              size = 1.5, color = 'blue')+
+  geom_smooth(method = 'glm', formula = y~ns(x,df=3), se = FALSE,
+              size = 1.5, color = 'purple')+
+  theme(legend.position = c(0.2, 0.9),
+      legend.title = element_blank(),
+      legend.text = element_text(size = 10),
+      legend.key = element_blank())
+plot1ns
+
+
+
+
+```
+```{r}
+
+set.seed(653)
+rows <- 1:nrow(data)
+shuffled_rows <- sample(rows, replace = FALSE)
+head(shuffled_rows, n = 20)
+# Declare the number of folds
+B <- 3
+# Divide the rows into 10 folds and code each row according to which fold they belong
+folds <- cut(rows, breaks = B, labels = FALSE)
+head(folds, n = 20)
+
+test_rows <- shuffled_rows[which(folds == 1)]
+train_rows <- shuffled_rows[which(folds != 1)]
+```
+```{r}
+test_data <- data[test_rows, ]
+train_data <- data[train_rows, ]
+
+model3_ns_train <- lm(age ~ ns(arm, 1), data = train_data)
+test_data <- test_data |>
+  mutate(model3_ns_pred = predict(model3_ns_train, newdata = test_data))
+
+head(test_data[,c(1,5:7)], n = 20)
+
+pred_arm <- NULL
+for (i in 1:B) {
+  
+  # Divide the data set into training and test data set and specify the row numbers
+  test_rows <- shuffled_rows[which(folds == i)]
+  train_rows <- shuffled_rows[which(folds != i)]
+  
+  # Call the relevant rows in the data
+  test_data <- data[test_rows, ]
+  train_data <- data[train_rows, ]
+  
+  model1_ns_train <- lm(age ~ ns(arm, 1), data = train_data)
+  test_data <- test_data |>
+    mutate(model3_ns_pred = predict(model3_ns_train, newdata = test_data))
+  
+  model2_ns_train <- lm(age ~ ns(arm, 2), data = train_data)
+  test_data <- test_data |>
+    mutate(model3_ns_pred = predict(model3_ns_train, newdata = test_data))
+  
+  
+   model3_ns_train <- lm(age ~ ns(arm, 3), data = train_data)
+  test_data <- test_data |>
+    mutate(model3_ns_pred = predict(model3_ns_train, newdata = test_data))
+
+  # Stack the data altogether
+  pred_arm <- rbind(pred_arm, test_data)
+}
+
+```
+```{r}
+model_cand_cvplot <- basic_scatter +
+  geom_line(data = pred_arm, aes(color = "1", y = model1_ns_pred,
+                                         x = age), size = 1.5) +
+  geom_line(data = pred_arm, aes(color = "2", y = model2_ns_pred,
+                                         x = age), size = 1.5) +
+  geom_line(data = pred_arm, aes(color = "3", y = model3_ns_pred,
+                                         x = age), size = 1.5) +
+  # Add the color legend specifications
+  scale_color_manual(breaks = c("1", "2", "3"),
+                     values = c("#024873", "#920045", "#67733C"),
+                     labels = c("natural spline with 1 df",
+                                "natural spline with 2 df",
+                                "natural spline with 3 df")) +
+  # Add theme customizations
+  theme(legend.position = c(0.2, 0.9),
+      legend.title = element_blank(),
+      legend.text = element_text(size = 10),
+      legend.key = element_blank())
+
+model_cand_cvplot
+```
+

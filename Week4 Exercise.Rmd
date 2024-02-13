@@ -1,0 +1,111 @@
+---
+title: "Week4 Exercise"
+output: html_document
+date: "2024-02-13"
+---
+```{r}
+library(tidyverse)
+load("nepal.anthro.rdata")
+
+data <- nepal.anthro |> 
+  select(c(1:16)) |> 
+  filter(num == 1) |> 
+  filter(!is.na(age) & !is.na(arm)) |>
+  arrange(age) |>
+  mutate(age_sp6 = ifelse(age > 6, age-6, 0))
+```
+
+```{r}
+fit <- lm(arm ~ age + age_sp6, data = data)
+summary(fit)
+```
+```{r}
+slr_boot <- function(data, index) {
+  # This line allows the boot function to select a bootstrapped sample
+  # Note that it does not matter what "index" is called in this case, 
+  # as boot automatically reads the second argument of the function as the
+  # indexing variable for resampling
+  resample <- data[index,]
+  # Run the model and retrieve the parameter of interest
+  # coef(.)[1] is the intercept, 
+  # coef(.)[2] is the slope in a simple linear regression
+  coef(lm(age ~ GA.at.outcome, data = resample))[2]
+}
+```
+
+```{r}
+# Set seed
+set.seed(653)
+
+library(boot)
+
+# Run boot function and store boot object
+# 1,000 replicates
+slr_result <- boot(data, slr_boot, R = 1000)
+
+# Show results using t within the boot object
+# In our example t will be a vector of length 1000 with
+# element of t representing the linear slope obtained from
+# a bootstrapped sample
+head(slr_result$t)
+```
+
+```{r}
+# Create custom theme
+custom_theme <- theme(
+  panel.background = element_blank(),
+  axis.ticks = element_blank(),
+  axis.text = element_text(size = 12),
+  axis.title = element_text(size = 12, face = "bold"),
+  axis.line = element_line(size = 0.5),
+  plot.title = element_text(size = 14, face = "bold", hjust = 0.5)
+)
+
+# Plot histogram of estimates
+slr_boot_hist <- ggplot(data = data.frame(t = slr_result$t), aes(x = t)) + 
+  geom_histogram() +
+  labs(x = "Estimated SLR slope") +
+  custom_theme
+slr_boot_hist
+```
+
+```{r}
+# Retrieve boostrapped 95% CI
+boot.ci(slr_result, type = "bca")
+
+```
+
+```{r}
+# Run the model
+fit <- lm(arm ~ age + age_sp6, data = data)
+# Retrieve model-based point estimates
+# coef(.)[2:3] are the slopes
+fit_coef <- coef(fit)[2:3]
+#
+fit_ptest <- c(fit_coef[1], 
+              fit_coef[1] + fit_coef[2],
+              (fit_coef[1] + fit_coef[2])/fit_coef[1])
+# Retrieve model-based 95% CI
+fit_age_less6_ci <- confint(fit)[2,]
+# Store variance covariance matrix
+fit_vcov <- vcov(fit)
+# (b)
+fit_age_6plus_se <- sqrt(fit_vcov[2,2] + fit_vcov[3,3] + 2*fit_vcov[2,3])
+fit_age_6plus_ci <- fit_ptest[2] + c(-1,1)*qnorm(0.975)*fit_age_6plus_se
+# (c)
+fit_ratio_gprime <- matrix(c(0, -fit_coef[2]/fit_coef[1]^2, 1/fit_coef[1]), nrow = 3, ncol = 1)
+fit_ratio_se <- sqrt(t(fit_ratio_gprime) %*% fit_vcov %*% fit_ratio_gprime)
+fit_ratio_ci <- fit_ptest[3] + c(-1,1)*qnorm(0.975)*fit_ratio_se
+
+# Combine all 95% CIs
+fit_model_ci <- cbind(fit_age_less6_ci, fit_age_6plus_ci, fit_ratio_ci)
+# Store in a table
+fit_model_table <- as.data.frame(rbind(fit_ptest, fit_model_ci))
+colnames(fit_model_table) <- c("Slope <6", "Slope 6+", "Slope 6+/Slope <6")
+fit_model_table = cbind(data.frame('Value'=c('Point estimate','Lower 95% CI','Upper 95% CI')),fit_model_table)
+rownames(fit_model_table) <- NULL
+
+library(kableExtra)
+fit_model_table |> kable(format = "html", align = "lccc") |>
+add_header_above(c(" "=1, "Model-based method"=3))
+```

@@ -1,0 +1,66 @@
+---
+title: "Week4InClass"
+output: html_document
+date: "2024-02-13"
+---
+
+```{r}
+## Set a random seed
+## to ensure replication of simulation
+set.seed(120)
+
+n = 30
+K = 1000
+## Repeat the following K times
+
+B0 = NULL
+B1 = NULL 
+for(i in 1:K){
+y = r(n,df=1)
+ybar = c(ybar,mean(y))
+}
+
+par(mfrow=c(1,2),mar=c(4,4,1,1))
+hist(ybar, breaks=20, prob=TRUE,
+xlab="Sample mean (n=30)",
+main="Hist + normal curve")
+curve(dnorm(x, mean=mean(ybar), sd=sqrt(var(ybar))),
+col="darkblue", lwd=2, add=TRUE, yaxt="n")
+qqnorm(scale(ybar));abline(0,1)
+```
+```{r}
+set.seed(123) # For reproducibility
+
+n <- 30 
+k <- 1000 
+beta_0 <- 0 
+beta_1 <- 1 
+
+# Store estimates
+estimates_gaussian <- numeric(k)
+estimates_nongaussian <- numeric(k)
+
+for (i in 1:k) {
+  x <- runif(n, -1, 1) # Uniformly distributed X
+  eps_gaussian <- rnorm(n, 0, 1) # Gaussian residuals
+  y_gaussian <- beta_0 + beta_1 * x + eps_gaussian
+  model_gaussian <- lm(y_gaussian ~ x)
+  estimates_gaussian[i] <- coef(model_gaussian)[2] # Store beta_1 estimate
+}
+
+# Simulation with Non-Gaussian (uniform) residuals
+for (i in 1:k) {
+  x <- runif(n, -1, 1) # Uniformly distributed X
+  eps_nongaussian <- runif(n, -1, 1) # Non-Gaussian residuals
+  y_nongaussian <- beta_0 + beta_1 * x + eps_nongaussian
+  model_nongaussian <- lm(y_nongaussian ~ x)
+  estimates_nongaussian[i] <- coef(model_nongaussian)[2] # Store beta_1 estimate
+}
+
+# Compare distributions of beta_1 estimates
+par(mfrow = c(1, 2)) # Set up plotting area
+hist(estimates_gaussian, main = "Gaussian Residuals", xlab = "beta_1 estimates")
+hist(estimates_nongaussian, main = "Non-Gaussian Residuals", xlab = "beta_1 estimates")
+curve(dnorm(x, mean=mean(beta_1), sd=sqrt(var(beta_1))),col="darkblue", lwd=2, add=TRUE, yaxt="n")
+```
+

@@ -1,0 +1,335 @@
+---
+title: "HW1"
+author: "Cathy Zhang"
+date: "2024-02-05"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+library(tidyverse)
+load("nepal.anthro.rdata")
+names(nepal.anthro)
+
+d <- nepal.anthro |>
+  select(age, wt, num, sex, ht) |> 
+  filter(num == 1) |>
+  na.omit(age, wt, ht)
+```
+
+## Interpreting Simple Linear Regression Coefficients
+```{r}
+custom_theme <- theme(
+  panel.background = element_blank(),
+  axis.ticks = element_blank(),
+  axis.text = element_text(size = 12),
+  axis.title = element_text(size = 14, face = "bold"),
+  axis.line = element_line(size = 0.5)
+)
+
+plot <- ggplot(data = d, aes(x = age, y = wt, color = as.factor(sex)))+
+  geom_jitter(size = 1.5, alpha = 0.75)+
+  labs(x = 'Age at baseline (in months)',
+       y = 'Weight at baseline (in kilograms)',
+       title = "The Effect of Age in Months on Children's Weight in Kilograms")+
+  scale_x_continuous(breaks = seq(0,60,10))+
+  scale_y_continuous(breaks = seq(0,20,5))+
+  custom_theme+
+  #add the color legend specification
+  scale_color_manual(breaks = c(1,2),
+                     values = c("#16833f", "#920903"),
+                     labels = c("Male", "Female")) +
+  theme(legend.position = c(0.1, 0.9),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 10),
+        legend.key = element_blank())
+
+#natural spline with ~3 degrees of freedom
+library(splines)
+plotns <- plot+
+  geom_smooth(method = 'glm', formula = y~ns(x,df=3), se = FALSE,
+              size = 1.5, color = '#024873')
+plotns
+
+#add ablines
+plotns1 <- plotns + 
+  geom_vline(xintercept = 6, linetype = "dashed", color = "blue", size = 1) +
+  geom_vline(xintercept = 30, linetype = "dashed", color = "blue", size = 1) +
+  geom_vline(xintercept = 50, linetype = "dashed", color = "blue", size = 1)
+
+print(plotns1)
+
+
+ages_of_interest <- d %>% filter(age %in% c(6, 30, 50))
+nrow(d) # to get the number of children we have plotted
+
+# Calculate mean and standard deviation for these ages
+stats_by_age <- ages_of_interest %>% 
+  group_by(age) %>% 
+  summarize(mean_weight = mean(wt), sd_weight = sd(wt))
+
+print(stats_by_age)
+```
+
+The weights of 185 children ranging from 0 to 60 months of age were plotted as a function of age. The average (SD) weight of 6 month olds is approximately 6 (1) kg, respectively. Average and SD of weight increases with age such that the average (SD) weight is approximately 10 (0.5) kg and 13 (2)kg for children aged 30 and 50 months, respectively. 
+
+
+```{r}
+#Part 2
+ggplot(d, aes(x = age, y = wt, color = as.factor(sex)))+
+  geom_point(alpha=0.5)+
+  geom_smooth(method='glm', 
+              formula = y ~ns(x,df=3), 
+              aes(group=sex))+
+  scale_color_manual(values = c("#16833f", "#920903"), 
+                                labels = c("Male", "Female"), 
+                                name = "Sex") +
+  labs(x = 'Age (months)', y = 'Weight (kg)', title = "Weight as a Function of Age by Sex with Natural Spline Smoothing") +
+  theme(legend.position = c(0.1, 0.9),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 10),
+        legend.key = element_blank())+
+  custom_theme
+```
+The average weight of female children typically rises at a more gradual pace compared to their male peers. While females may initially weigh more than males up to around 5 months of age, males begin to surpass females in weight from the age of 5 to 60 months. Additionally, the rate at which female children gain weight significantly decelerates after reaching approximately 45 months, which is a trend not observed in male children.
+
+```{r}
+# Part 3
+model <- lm(wt ~ age, data = d)
+summary(model)
+```
+The intercept, estimated at 5.44453 with a standard error of 0.20432, indicates that on average, a newborn child is expected to weigh approximately 5.44 kilograms. The slope of the relationship between age and weight is estimated at 0.15700, with a standard error of 0.00585. This means that for each additional year of age, a child's weight is expected to increase by approximately 0.157 kilograms on average. The residual standard error (RSE) of 1.4 suggests that the average deviation of a child's actual weight from their predicted weight, based on age alone, is about 1.4 kilograms 
+
+
+```{r}
+#Part 4
+plotns2 <- plotns + geom_line(data = d, aes(x = age, y = predict(model, newdata = d)), color = "red", size = 1)
+
+plotns2
+```
++ The average weight does not increases linearly with age, as the data shows a clear curved pattern that the linear line fails to capture. Specifically, for children age about 15 months or younger, their weight does not increase as fast as what the linear function predicts. This weight gaining process starts to accelerate as the children gets older, from approximately 15 months to 40 months. After 40 months, the rate of weight gaining again slows, but it is not until about 50 months that it starts to stay below the linear function. Since linear function overlooks many these details in the diagram, the assumption that the average weight increases linearly with age is not reasonable. 
+
++ Since the data spread appears uniform around the regression line and across different ages, the assumption that "the variation in weights is the same at each age" is reasonable. 
+
+## Modeling Non-Linear Relationships with MLR
+```{r}
+#Part 1: Linear Splines
+d$age_c = d$age - 6
+d$agesp6=ifelse(d$age-6>0, d$age-6,0)
+d$agesp12 = ifelse(d$age > 12, d$age - 12, 0)
+model1 <- lm(wt ~ age_c + agesp6 + agesp12, data = d)
+summary(model1)
+
+d$fitted_values <- predict(model1)
+ggplot(d, aes(x = age, y = wt)) +
+  geom_point() +  # Raw weight vs. age data
+  geom_line(aes(y = fitted_values), color = "red") +  # Add fitted values
+  labs(x = "Age (months)", y = "Weight (kg)", title = "Weight vs. Age with Fitted Model") +
+  custom_theme
+```
++ d. We created a model to understand how children's weight changes and see if growth speeds up or slows down after these ages as they get older, by looking specifically at changes from a base age and then more closely once they pass 6 and 12 years old.
+
++ e. The regression model for child growth indicates that at the baseline of 6 months old (adjusting age such that age_c = age - 6), the expected weight is approximately 6.52 kilograms, before considering further adjustments for ages beyond 6 and 12 months. For each year increase in age from this 6-month baseline, there is an average weight increase of about 0.53 kilograms, not accounting for additional age-specific adjustments. The coefficient for age_sp6, at -0.3423, suggests a reduction in weight gain rate after 6 months, though this finding is not statistically significant (p = 0.1325), indicating a lack of strong evidence for a shift in growth rate at this age. Similarly, the adjustment for age after 12 months (age_sp12) with a coefficient of -0.0394, proposes a minor modification to the weight gain trajectory, yet this too lacks statistical significance (p = 0.6303). 
+
++ f. The analysis primarily supports a linear growth curve for weight in children, as evidenced by the significant linear relationship between age and weight, with non-significant findings for proposed non-linear adjustments at specific age milestones.
+
+```{r}
+#Part 2: Cubic Splines
+library(splines)
+
+age_c <- (d$age - 6)
+age2 <- (d$age - 6)^2
+age3 <- (d$age - 6)^3
+age_csp1 <- pmax(d$age - 6, 0)^3
+
+cubic_model <- lm(wt ~ age_c + age2 + age3 + age_csp1, data = d)
+summary(model)
+
+
+d$fitted_linear <- predict(model1)
+d$fitted_cubic <- predict(cubic_model)
+
+library(ggplot2)
+
+
+ggplot(d, aes(x = age)) +
+  geom_point(aes(y = wt, color = "Raw Data"), size = 2) +  # Raw data with legend entry
+  geom_line(aes(y = fitted_cubic, color = "Cubic Fit"), size = 1) +  # Cubic spline
+  geom_line(aes(y = fitted_linear, color = "Linear Fit"), size = 1) +  # Linear fit
+  labs(x = "Age", y = "Weight", title = "Weight vs. Age with Linear and Cubic Splines") +
+  scale_color_manual(values = c("Cubic Fit" = "blue", "Linear Fit" = "red")) +
+  custom_theme
+
+```
+
+
+```{r}
+#Part 3: Natural Cubic Splines
+library(splines)
+model_nsc <- lm(wt ~ ns(age, df=3), data = d)
+
+d$fitted_nsc <- predict(model_nsc)
+
+ggplot(d, aes(x = age, y = wt)) +
+  geom_point(color = "grey", alpha = 0.8) + 
+  geom_line(aes(y = fitted_linear), color = "red", linetype = "dashed") +
+  geom_line(aes(y = fitted_cubic), color = "dark green") +
+  geom_line(aes(y = fitted_nsc), color = "blue") +
+  labs(title = "Weight vs. Age with Different Spline Models", x = "Age", y = "Weight") +
+  theme_minimal()
+
+```
++ d. In our case, linear model fails to capture the intricate curvature present in growth data. While both cubic spline and natural cubic spline can appear similar across much of the data, natural cubic spline offers a more realistic behavior at the data's boundaries due to their linear constraints at the extremes. Therefore, I think natural cubic spline is most consistent with the observed data. 
+
+
+```{r}
+#e.g. age 6, 30, 50
+X <- model.matrix(model_nsc)
+H <- X %*% solve(t(X) %*% X) %*% t(X)
+
+closest_to_6 <- which.min(abs(d$age - 6))
+closest_to_30 <- which.min(abs(d$age - 30))
+closest_to_50 <- which.min(abs(d$age - 50))
+
+# Preparing the data for plotting
+age_vector <- d$age  # Your vector of ages
+influence_6 <- H[closest_to_6, ]
+influence_30 <- H[closest_to_30, ]
+influence_50 <- H[closest_to_50, ]
+
+# Plotting
+plot(age_vector, influence_6, col = 'red', ylim = range(H), xlab = 'Age', ylab = 'Influence', main = 'Influence of Ages on Predicted Values')
+points(age_vector, influence_30, col = 'blue')
+points(age_vector, influence_50, col = 'dark green')
+legend("topright", legend = c("Closest to Age 6", "Closest to Age 30", "Closest to Age 50"), col = c("red", "blue", "dark green"), lty = 1)
+
+```
+The influence plot for the model shows that children at around 6 and 50 months exert the most significant influence on the predicted weights, which aligns with the mean model's provided data showing greater variability in weight at these ages—with standard deviations of 1 kg and 2 kg, respectively. In contrast, the influence at 30 months is less marked, which could be reflective of the lower standard deviation of 0.5 kg at that age, indicating a tighter clustering of weights and consequently a more consistent, less influential effect on the model's overall predictions.
+
+### Part C: Selecting Among Competing Models
+
+```{r}
+set.seed(653)
+n <- nrow(d)
+B <- 10 
+folds <- cut(seq_len(n), breaks=B, labels=FALSE)
+
+cv_mse <- numeric(8)
+non_cv_mse <- numeric(8)
+
+for (df in 1:8) {
+  df_errors <- numeric(B)
+  
+  full_model <- lm(wt ~ ns(age, df), data = d)
+  full_predictions <- predict(full_model, newdata = d)
+  non_cv_mse[df] <- mean((d$wt - full_predictions)^2)
+  
+  for (i in 1:B) {
+    train_data <- d[folds != i, ]
+    test_data <- d[folds == i, ]
+    
+    model_train <- lm(wt ~ ns(age, df), data = train_data)
+    
+    predictions <- predict(model_train, newdata = test_data)
+    
+    df_errors[i] <- mean((test_data$wt - predictions)^2)
+  }
+  
+  cv_mse[df] <- mean(df_errors)
+}
+
+model_mse_comparison <- data.frame(
+  df = 1:8,
+  cv_mse = cv_mse,
+  non_cv_mse = non_cv_mse
+)
+
+print(model_mse_comparison)
+
+
+plot(model_mse_comparison$df, model_mse_comparison$cv_mse, type = "b", col = "red", 
+     xlab = "Degrees of Freedom", ylab = "Prediction Error", 
+     main = "Cross Validated Prediction Error")
+
+# Adding a legend to the plot
+legend("topright", legend = c("Cross Validated MSE"), col = c("red"), pch = 19, bty = "n")
+
+
+
+```
++ The number of degrees of freedom that gives the lowest cross-validated MSE is 2 (1.86) although the values are very close to one another whatever the number of degrees of freedom to use. This is likely because a linear trend can be observed so additional spline terms do not necessarily enhance the fit.The non-CV error is generally lower than the CV error because the model is being assessed on the same data it was trained on, which can lead to overfitting. 
+
+```{r}
+optimal_df <- which.min(cv_mse)
+optimal_model <- lm(wt ~ ns(age, optimal_df), data = d)
+
+d$wt_pred <- predict(optimal_model, newdata = d)
+
+ggplot(d, aes(x = age)) +
+  geom_point(aes(y = wt), color = "grey") +  # Raw data
+  geom_line(aes(y = wt_pred), color = "blue") +  # Model predictions
+  labs(x = "Age (months)", y = "Weight (kg)", 
+       title = "Observed Weights and Optimal Model Curve") +
+  custom_theme
+
+
+```
+In this analysis, we sought to determine the model that best predicts children's weight as a function of age from 0 to 60 months. We employed a cross-validation approach, partitioning the data into ten subsets and systematically leaving out each subset in turn to validate the model trained on the remaining data. We explored models with varying degrees of freedom, fitting natural splines to capture potential non-linear growth patterns. The model's performance was quantified by calculating the mean squared error (MSE) for each subset and then averaging these to obtain a cross-validated estimate of prediction error for models with degrees of freedom ranging from 1 to 8. The optimal model was selected based on the lowest cross-validated MSE.
+
+The optimal natural spline model was found to have a degree of freedom of 2, indicating that it provided the best balance between fit and complexity. When this model was applied to the entire dataset, the prediction of children's weight across the age spectrum was significantly improved. The average cross-validated MSE for the optimal model was 1.86 kg^2, suggesting that the model's predictions were, on average, within 1.36 kg of the actual weights. A graphical representation of the model's performance showed a close fit to the data, with the predicted weights tracking the observed weights across all ages. The blue line representing the model predictions overlaid on the scatter plot of the actual weights (colored grey) confirmed the model's appropriateness for capturing the growth trajectory of children in this age range.
+
+## Question 4: Interpreting Multiple Linear Regression Coefficients
+```{r}
+library(rgl)
+library(scatterplot3d)
+#
+d1 <- d |>
+  select(age, wt, ht)
+
+plot3d(d$age,d$ht,d$wt)
+scatterplot3d(d$age,d$ht,d$wt,pch=16,type="h",highlight.3d=TRUE,xlab="age (months)",ylab="height (cm)",zlab="weight (grams)",main="Nepal Children's Study")
+pairs(d1)
+```
+
+```{r}
+model_mlr <- lm(wt ~ age + ht, data = d)
+summary(model_mlr)
+```
+While each month of age has a minimal impact on a child's weight, increasing by a mere 0.005 kilograms, height emerges as a significant factor, with each centimeter of growth associated with a 0.23 kilogram increase in weight. This suggests that, in the context of a child's development, height is a much more potent indicator of weight than age.
+
+```{r}
+library(ggplot2)
+
+d <- d %>%
+  mutate(resid_age = lm(age ~ ht, data = d)$residuals)
+
+# Model of residuals (R(Y|Z) on R(X|Z))
+resid_model <- lm(wt ~ resid_age, data = d)
+summary(resid_model)
+confint(resid_model)
+
+
+# Multiple regression (MR) model
+mrModel <- lm(wt ~ age + ht, data = d)
+summary(mrModel)
+confint(mrModel)
+
+# Adjusted variable plot
+avplot <- ggplot(data = d, aes(x = resid_age, y = wt)) +
+  geom_jitter(alpha = 0.8) +
+  geom_smooth(aes(y = predict(resid_model)), method = "lm", formula = y ~ x,
+              linewidth = 1, color = "#024873", se = FALSE) +
+  labs(x = "Residuals of Age Adjusted for Height",
+       y = "Residuals of Weight Adjusted for Height",
+       title = "Adjusted Variable Plot for Weight on Age Adjusting for Height") +
+  custom_theme
+
+avplot
+```
+3. The adjusted variable slope resid_age is 0.00537kg, which is equal to the multiple linear regression's estimate for age, 0.00537 kg.
+
+4. For the MLR model, the estimate for age is 0.00537, and the confidence interval for the age coefficient ranges from -0.0147 to 0.0254. This suggests that, within the context of this model which also includes height, age alone does not have a significant or clear impact on weight. In the SLR model, focusing on resid_age, which is also estimated to be 0.00537, the confidence interval ranges from -0.0638 to 0.0745. This wider interval compared to the age interval in the MLR model reflects greater uncertainty about the age effect on weight once height's influence is accounted for indirectly through residuals.
+
+5. In this part, a multiple linear regression model was first applied to assess the influence of age and height on children's weight directly, using the formula wt ~ age + ht on the dataset d. Subsequently, a simple linear regression was conducted on residuals to isolate the effect of age on weight, adjusting for height. 
+
